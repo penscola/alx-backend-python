@@ -10,6 +10,7 @@ from unittest.mock import (
     patch,
 )
 from parameterized import parameterized, parameterized_class
+from requests import HTTPError
 
 from client import (
     GithubOrgClient
@@ -106,33 +107,24 @@ class TestGithubOrgClient(unittest.TestCase):
         mock_get_json.assert_called_once()
 
     @parameterized.expand([
-        ({"license": {"key": "my_license"}}, "my_license", True),
-        ({"license": {"key": "other_license"}}, "my_license", False),
+        ({'license': {'key': "bsd-3-clause"}}, "bsd-3-clause", True),
+        ({'license': {'key': "bsl-1.0"}}, "bsd-3-clause", False),
     ])
-    def test_has_license(
-            self,
-            repo: Dict[str, Dict],
-            license_key: str,
-            has_key: bool,
-            ) -> None:
+    def test_has_license(self, repo: Dict, key: str, expected: bool) -> None:
         """Tests the `has_license` method."""
-        self.assertEqual(
-            GithubOrgClient.has_license(repo, license_key),
-            has_key,
-        )
+        gh_org_client = GithubOrgClient("google")
+        client_has_licence = gh_org_client.has_license(repo, key)
+        self.assertEqual(client_has_licence, expected)
 
 
-@parameterized_class(
-    ("org_payload", "repos_payload", "expected_repos", "apache2_repos"),
-    [
-        (
-            TEST_PAYLOAD[0][0],
-            TEST_PAYLOAD[0][1],
-            TEST_PAYLOAD[0][2],
-            TEST_PAYLOAD[0][3],
-        ),
-    ],
-)
+@parameterized_class([
+    {
+        'org_payload': TEST_PAYLOAD[0][0],
+        'repos_payload': TEST_PAYLOAD[0][1],
+        'expected_repos': TEST_PAYLOAD[0][2],
+        'apache2_repos': TEST_PAYLOAD[0][3],
+    },
+])
 class TestIntegrationGithubOrgClient(unittest.TestCase):
     """Performs integration tests for the `GithubOrgClient` class."""
     @classmethod
@@ -143,16 +135,27 @@ class TestIntegrationGithubOrgClient(unittest.TestCase):
             'https://api.github.com/orgs/google/repos': cls.repos_payload,
         }
 
-        def get_payload(url: str) -> Mock:
+        def get_payload(url):
             if url in route_payload:
                 return Mock(**{'json.return_value': route_payload[url]})
-            return Mock(**{'json.return_value': {}})
+            return HTTPError
 
-        cls.get_patcher = patch(
-            "requests.get",
-            side_effect=get_payload,
-        )
+        cls.get_patcher = patch("requests.get", side_effect=get_payload)
         cls.get_patcher.start()
+
+    def test_public_repos(self) -> None:
+        """Tests the `public_repos` method."""
+        self.assertEqual(
+            GithubOrgClient("google").public_repos(),
+            self.expected_repos,
+        )
+
+    def test_public_repos_with_license(self) -> None:
+        """Tests the `public_repos` method with a license."""
+        self.assertEqual(
+            GithubOrgClient("google").public_repos(license="apache-2.0"),
+            self.apache2_repos,
+        )
 
     @classmethod
     def tearDownClass(cls) -> None:
