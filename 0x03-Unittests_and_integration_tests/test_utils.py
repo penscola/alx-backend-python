@@ -1,21 +1,30 @@
 #!/usr/bin/env python3
-"""A module for testing the utils module.
+"""A module for testing the client module.
 """
 import unittest
+from typing import Dict
 from parameterized import parameterized
+from unittest.mock import MagicMock, patch
 
-from utils import (
-    access_nested_map,
+from client import (
+    GithubOrgClient
 )
 
 
-class TestAccessNestedMap(unittest.TestCase):
-    """Tests the access_nested_map function."""
+class TestGithubOrgClient(unittest.TestCase):
+    """Tests the `GithubOrgClient` class."""
     @parameterized.expand([
-        ({"a": 1}, ("a",), 1),
-        ({"a": {"b": 2}}, ("a",), {"b": 2}),
-        ({"a": {"b": 2}}, ("a", "b"), 2),
+        ("google", {'login': "google"}),
+        ("abc", {'login': "abc"}),
     ])
-    def test_access_nested_map(self, nested_map, path, expected):
-        """Tests access_nested_map's output."""
-        self.assertEqual(access_nested_map(nested_map, path), expected)
+    @patch(
+        "client.get_json",
+    )
+    def test_org(self, org: str, resp: Dict, mocked_fxn: MagicMock) -> None:
+        """Tests the `org` method."""
+        mocked_fxn.return_value = MagicMock(return_value=resp)
+        gh_org_client = GithubOrgClient(org)
+        self.assertEqual(gh_org_client.org(), resp)
+        mocked_fxn.assert_called_once_with(
+            "https://api.github.com/orgs/{}".format(org)
+        )
